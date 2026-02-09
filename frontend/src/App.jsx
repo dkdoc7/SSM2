@@ -19,11 +19,6 @@ MAX_Freq:
   Default: 5.0
   Unit: Hz
 
-_Separator:
-  Description: 라벨 없이 표시되는 파라미터 예시
-  Type: String
-  Default: "라벨이 없는 필드입니다"
-
 A_Volt:
   Description: A 동작 전압
   Type: Double

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 
 export default function ResizablePanel({ leftContent, rightContent }) {
-    const [leftWidth, setLeftWidth] = useState(40); // 왼쪽 패널 너비 (%)
+    const [leftWidth, setLeftWidth] = useState(70); // 왼쪽 패널 너비 (%) (YAML:UI = 70:30)
     const [isDragging, setIsDragging] = useState(false);
     const containerRef = useRef(null);
 

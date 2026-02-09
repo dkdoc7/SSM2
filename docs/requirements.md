@@ -50,7 +50,7 @@ YAML 형식으로 파라미터를 정의하면 웹 UI가 자동으로 생성되�
 
 ### 3.2 사용성 (Usability)
 - **실시간 피드백**: YAML 구문 오류 및 값 범위 초과 시 즉각적인 시각적 경고.
-- **리사이저블 패널**: 중앙의 핸들을 드래그하여 에디터와 UI 패널의 비율 조정 가능.
+- **리사이저블 패널**: 중앙의 핸들을 드래그하여 에디터와 UI 패널의 비율 조정 가능 (초기 비율 YAML 70 : UI 30).
 
 ## 4. 기술 스택 (Technical Stack)
 - **Frontend**: React (Vite), js-yaml.
@@ -72,15 +72,20 @@ MAX_Freq:
   Default: 5.0
   Unit: Hz
 
-_Separator:
-  Description: 라벨 없이 표시되는 텍스트 예시
-  Type: String
-  Default: "라벨이 숨겨진 필드 예시"
+A_Volt:
+  Description: A 동작 전압
+  Type: Double
+  Default: 1.2
+
+B_Volt:
+  Description: B 동작 전압
+  Type: Double
+  Default: 2.4
 
 MAX_Volt:
   Description: 최대 전압
   Type: Double
   Range: [1.0, 10.0]
-  Default: 7.2
+  Default: (A_Volt + B_Volt)
   Unit: V
 ```

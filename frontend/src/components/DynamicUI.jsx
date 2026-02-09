@@ -1,9 +1,15 @@
 import React, { useState } from 'react';
 import DynamicField from './DynamicField';
+import Modal from './Modal';
 
 export default function DynamicUI({ parameters }) {
     const [values, setValues] = useState({});
     const [hoveredParam, setHoveredParam] = useState(null);
+    const [modalConfig, setModalConfig] = useState({ isOpen: false, title: '', message: '' });
+
+    const showModal = (title, message) => {
+        setModalConfig({ isOpen: true, title, message });
+    };
 
     if (!parameters || Object.keys(parameters).length === 0) {
         return (
@@ -310,7 +316,10 @@ export default function DynamicUI({ parameters }) {
                     style={{ flex: 1 }}
                     onClick={() => {
                         console.log('Current values:', values);
-                        alert('값이 저장되었습니다!\n\n' + JSON.stringify(values, null, 2));
+                        showModal(
+                            '💾 파라미터 저장 완료',
+                            '설정하신 파라미터 값이 성공적으로 저장되었습니다.'
+                        );
                     }}
                 >
                     💾 저장
@@ -319,12 +328,26 @@ export default function DynamicUI({ parameters }) {
                     className="btn btn-secondary"
                     onClick={() => {
                         setValues({});
-                        alert('기본값으로 초기화되었습니다.');
+                        showModal(
+                            '🔄 초기화 완료',
+                            '모든 파라미터가 초기값으로 재설정되었습니다.'
+                        );
                     }}
                 >
                     🔄 초기화
                 </button>
             </div>
+
+            {/* 커스텀 알림 모달 */}
+            <Modal
+                isOpen={modalConfig.isOpen}
+                onClose={() => setModalConfig({ ...modalConfig, isOpen: false })}
+                title={modalConfig.title}
+            >
+                <div style={{ textAlign: 'center', padding: '1rem 0' }}>
+                    <p style={{ fontSize: '1.1rem' }}>{modalConfig.message}</p>
+                </div>
+            </Modal>
         </div>
     );
 }
