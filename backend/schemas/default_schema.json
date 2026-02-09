@@ -1,0 +1,92 @@
+{
+  "version": "1.0",
+  "groups": [
+    {
+      "id": "system_config",
+      "label": "시스템 설정",
+      "description": "시스템 전반에 걸친 기본 설정",
+      "parameters": [
+        {
+          "key": "MAX_RETRY",
+          "value": 5,
+          "type": "number",
+          "label": "최대 재시도 횟수",
+          "description": "API 호출 실패 시 재시도 최대 횟수",
+          "min": 1,
+          "max": 10
+        },
+        {
+          "key": "ENABLE_LOGGING",
+          "value": true,
+          "type": "boolean",
+          "label": "로깅 활성화",
+          "description": "시스템 로그 기록 활성화 여부"
+        },
+        {
+          "key": "LOG_LEVEL",
+          "value": "INFO",
+          "type": "select",
+          "label": "로그 레벨",
+          "description": "로그 출력 수준",
+          "options": ["DEBUG", "INFO", "WARNING", "ERROR"]
+        },
+        {
+          "key": "API_TIMEOUT",
+          "value": 30,
+          "type": "number",
+          "label": "API 타임아웃 (초)",
+          "description": "외부 API 호출 시 최대 대기 시간",
+          "min": 5,
+          "max": 120
+        }
+      ]
+    },
+    {
+      "id": "database_config",
+      "label": "데이터베이스 설정",
+      "description": "데이터베이스 연결 및 성능 관련 설정",
+      "parameters": [
+        {
+          "key": "DB_POOL_SIZE",
+          "value": 10,
+          "type": "number",
+          "label": "커넥션 풀 크기",
+          "description": "데이터베이스 연결 풀의 최대 크기",
+          "min": 1,
+          "max": 100
+        },
+        {
+          "key": "ENABLE_QUERY_CACHE",
+          "value": true,
+          "type": "boolean",
+          "label": "쿼리 캐시 활성화",
+          "description": "자주 사용되는 쿼리 결과 캐싱"
+        }
+      ]
+    },
+    {
+      "id": "ui_config",
+      "label": "UI 설정",
+      "description": "사용자 인터페이스 관련 설정",
+      "parameters": [
+        {
+          "key": "THEME",
+          "value": "dark",
+          "type": "select",
+          "label": "테마",
+          "description": "기본 UI 테마",
+          "options": ["light", "dark", "auto"]
+        },
+        {
+          "key": "ITEMS_PER_PAGE",
+          "value": 20,
+          "type": "number",
+          "label": "페이지당 항목 수",
+          "description": "목록 화면에서 한 페이지에 표시할 항목 수",
+          "min": 10,
+          "max": 100
+        }
+      ]
+    }
+  ]
+}
