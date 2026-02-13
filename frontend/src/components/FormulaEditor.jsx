@@ -14,11 +14,32 @@ export default function FormulaEditor({ parameters, onResultChange }) {
     const inputRef = useRef(null);
     const suggestionsRef = useRef(null);
 
+    // 조건부 수식 관리
+    const [conditions, setConditions] = useState([]);
+    const [activeInputId, setActiveInputId] = useState('main'); // 'main', 'condition-{id}', 'formula-{id}'
+
     // 수식 평가 결과를 부모 컴포넌트에 등록
     const handleRegister = () => {
         if (evaluationResult && outputVarName) {
             onResultChange(outputVarName, evaluationResult.value, formula);
         }
+    };
+
+    // 조건 추가
+    const addCondition = () => {
+        setConditions([...conditions, { id: Date.now(), condition: '', formula: '' }]);
+    };
+
+    // 조건 삭제
+    const removeCondition = (id) => {
+        setConditions(conditions.filter(c => c.id !== id));
+    };
+
+    // 조건 업데이트
+    const updateCondition = (id, field, value) => {
+        setConditions(conditions.map(c =>
+            c.id === id ? { ...c, [field]: value } : c
+        ));
     };
 
     // 파라미터 키 목록 추출
@@ -191,41 +212,58 @@ export default function FormulaEditor({ parameters, onResultChange }) {
     const convertToLatex = (formulaText) => {
         if (!formulaText) return '';
 
-        // 1. 변수명을 먼저 보호 (\text{...})
         let latex = formulaText;
-        const variables = formulaText.match(/[a-zA-Z_][a-zA-Z0-9_]*/g) || [];
+
+        // 1. 논리 및 비교 연산자를 먼저 LaTeX로 변환
+        latex = latex
+            // 논리 연산자 (단어 및 기호)
+            .replace(/\band\b/g, ' \\land ')
+            .replace(/\bor\b/g, ' \\lor ')
+            .replace(/\bnot\b/g, ' \\neg ')
+            .replace(/&&/g, ' \\land ')
+            .replace(/\|\|/g, ' \\lor ')
+            .replace(/&/g, ' \\land ')
+            .replace(/\|/g, ' \\lor ')
+            // 비교 연산자 (순서 중요: 긴 것부터)
+            .replace(/!=/g, ' \\neq ')
+            .replace(/<=/g, ' \\leq ')
+            .replace(/>=/g, ' \\geq ')
+            .replace(/==/g, ' = ')
+            .replace(/</g, ' < ')
+            .replace(/>/g, ' > ');
+
+        // 2. 변수명을 보호 (\text{...})
+        // LaTeX 명령어가 아닌 일반 변수명만 찾기
+        // \land, \lor 같은 명령어는 이미 \ 앞에 있으므로 제외됨
+        const variables = latex.match(/(?<!\\)[a-zA-Z_][a-zA-Z0-9_]*/g) || [];
         const sortedVars = [...new Set(variables)].sort((a, b) => b.length - a.length);
 
         sortedVars.forEach(variable => {
+            // LaTeX 명령어 이름(land, lor, neg 등)은 제외
+            if (['land', 'lor', 'neg', 'neq', 'leq', 'geq', 'times', 'div', 'frac', 'text'].includes(variable)) {
+                return;
+            }
             const escapedVar = variable.replace(/_/g, '\\_');
-            latex = latex.replace(new RegExp(`\\b${variable}\\b`, 'g'), `\\text{${escapedVar}}`);
+            latex = latex.replace(new RegExp(`(?<!\\\\)\\b${variable}\\b`, 'g'), `\\text{${escapedVar}}`);
         });
 
-        // 2. 분수 처리 (a / b -> \frac{a}{b})
-        // 중첩 괄호를 지원하기 위한 정규식 (최대 3단계 중첩 지원)
-        // term1: 괄호로 묶인 식
+        // 3. 분수 처리 (a / b -> \frac{a}{b})
         const nestedParen = '\\((?:[^()]|\\((?:[^()]|\\([^()]*\\))*\\))*\\)';
-        // term2: \text{...}로 보호된 변수, 숫자, 소수점
         const simpleTerm = '\\\\text\\{[^{}]+\\}|[a-zA-Z0-9.\\_]+';
-        // 전체 항: (항) 또는 (괄호식) 들이 곱셈(*)으로 연결된 것까지 포함
         const baseTerm = `(?:${nestedParen}|${simpleTerm})`;
         const fullTerm = `${baseTerm}(?:\\s*\\*\\s*${baseTerm})*`;
 
         let prevLatex;
         let iteration = 0;
-        // 최대 10번 반복하여 중첩 분수 처리
         do {
             prevLatex = latex;
             const fractionRegex = new RegExp(`(${fullTerm})\\s*\\/\\s*(${fullTerm})`, 'g');
 
             latex = latex.replace(fractionRegex, (match, p1, p2) => {
-                // 양 끝의 불필요한 괄호 제거 로직
                 let num = p1.trim();
                 let den = p2.trim();
 
-                // 분자/분모 전체가 괄호로 감싸져 있다면 제거
                 if (num.startsWith('(') && num.endsWith(')')) {
-                    // 내부 괄호가 짝이 맞는지 확인 후 제거
                     num = num.slice(1, -1);
                 }
                 if (den.startsWith('(') && den.endsWith(')')) {
@@ -237,13 +275,13 @@ export default function FormulaEditor({ parameters, onResultChange }) {
             iteration++;
         } while (latex !== prevLatex && iteration < 10);
 
-        // 3. 나머지 연산자 처리
+        // 4. 나머지 산술 연산자 처리
         latex = latex
             .replace(/\*/g, ' \\times ')
             .replace(/\+/g, ' + ')
             .replace(/-/g, ' - ');
 
-        // 남은 / 가 있다면 (정규식에 안 걸린 경우) \div로 변경
+        // 남은 / 가 있다면 \div로 변경
         latex = latex.replace(/\//g, ' \\div ');
 
         return latex;
@@ -287,6 +325,65 @@ export default function FormulaEditor({ parameters, onResultChange }) {
                 </div>
             </div>
 
+            {/* Condition 섹션 */}
+            <div style={{ marginBottom: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                    <label style={{ fontSize: '0.9rem', fontWeight: '700', color: 'var(--text-secondary)' }}>
+                        Condition
+                    </label>
+                    <button
+                        onClick={addCondition}
+                        style={{
+                            padding: '0.25rem 0.5rem',
+                            background: 'var(--accent-primary)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '0.85rem',
+                            fontWeight: '600',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.25rem'
+                        }}
+                    >
+                        <span style={{ fontSize: '1rem' }}>+</span>
+                    </button>
+                </div>
+
+                {/* 조건부 케이스들 */}
+                {conditions.map((cond, index) => (
+                    <ConditionCase
+                        key={cond.id}
+                        cond={cond}
+                        index={index}
+                        outputVarName={outputVarName}
+                        onRemove={() => removeCondition(cond.id)}
+                        onUpdate={(field, value) => updateCondition(cond.id, field, value)}
+                        parameters={parameters}
+                        availableVariables={availableVariables}
+                        activeInputId={activeInputId}
+                        setActiveInputId={setActiveInputId}
+                        showSuggestions={showSuggestions}
+                        suggestions={suggestions}
+                        selectedSuggestionIndex={selectedSuggestionIndex}
+                        setSelectedSuggestionIndex={setSelectedSuggestionIndex}
+                        handleFormulaChange={handleFormulaChange}
+                        handleKeyDown={handleKeyDown}
+                        selectSuggestion={selectSuggestion}
+                        suggestionsRef={suggestionsRef}
+                        convertToLatex={convertToLatex}
+                    />
+                ))}
+            </div>
+
+            {/* Default Case 라벨 (조건이 있을 때만) */}
+            {conditions.length > 0 && (
+                <label style={{ fontSize: '0.9rem', fontWeight: '700', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.75rem' }}>
+                    Default Case
+                </label>
+            )}
+
             {/* 출력 변수 및 수식 입력 영역 */}
             <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1rem', flexWrap: 'nowrap' }}>
                 {/* 출력 변수명 입력 */}
@@ -295,6 +392,7 @@ export default function FormulaEditor({ parameters, onResultChange }) {
                         type="text"
                         value={outputVarName}
                         onChange={(e) => setOutputVarName(e.target.value)}
+                        readOnly={conditions.length > 0}
                         placeholder="출력 변수명"
                         style={{
                             width: '140px',
@@ -307,7 +405,8 @@ export default function FormulaEditor({ parameters, onResultChange }) {
                             textAlign: 'center',
                             fontWeight: '700',
                             color: 'var(--accent-primary)',
-                            background: 'rgba(52, 152, 219, 0.05)'
+                            background: conditions.length > 0 ? '#e9ecef' : 'rgba(52, 152, 219, 0.05)',
+                            cursor: conditions.length > 0 ? 'not-allowed' : 'text'
                         }}
                     />
                     <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--text-secondary)' }}>=</span>
@@ -321,6 +420,7 @@ export default function FormulaEditor({ parameters, onResultChange }) {
                         value={formula}
                         onChange={handleFormulaChange}
                         onKeyDown={handleKeyDown}
+                        onFocus={() => setActiveInputId('main')}
                         placeholder="수식을 입력하세요 (예: A_Volt + B_Volt * 2)"
                         style={{
                             width: '100%',
@@ -338,7 +438,7 @@ export default function FormulaEditor({ parameters, onResultChange }) {
                     />
 
                     {/* VS Code 스타일 자동완성 드롭다운 */}
-                    {showSuggestions && suggestions.length > 0 && (
+                    {showSuggestions && activeInputId === 'main' && suggestions.length > 0 && (
                         <div
                             ref={suggestionsRef}
                             style={{
@@ -472,9 +572,19 @@ export default function FormulaEditor({ parameters, onResultChange }) {
                             {/* 우측 컬럼: LaTeX */}
                             <div style={{ display: 'flex', flexDirection: 'column', background: 'white', padding: '1.5rem', borderRadius: '8px', border: '1px solid var(--border-color)', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.03)' }}>
                                 <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '1.25rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.1em', textAlign: 'center' }}>LaTeX Preview</div>
-                                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }} dangerouslySetInnerHTML={{ __html: katex.renderToString(`${outputVarName} = ${convertToLatex(formula)}`, { throwOnError: false, displayMode: true }) }} />
+                                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }} dangerouslySetInnerHTML={{
+                                    __html: katex.renderToString(
+                                        conditions.length > 0
+                                            ? `${outputVarName} = \\begin{cases} ${conditions.map(c => `${convertToLatex(c.formula || '')} & \\text{if } ${convertToLatex(c.condition || '')}`).join(' \\\\ ')} ${formula ? `\\\\ ${convertToLatex(formula)} & \\text{otherwise}` : ''} \\end{cases}`
+                                            : `${outputVarName} = ${convertToLatex(formula)}`,
+                                        { throwOnError: false, displayMode: true }
+                                    )
+                                }} />
                                 <div style={{ marginTop: '1.5rem', fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'monospace', background: '#f8f9fa', padding: '0.75rem', borderRadius: '4px', border: '1px solid #eee', overflowX: 'auto' }}>
-                                    {outputVarName} = {convertToLatex(formula)}
+                                    {conditions.length > 0
+                                        ? `${outputVarName} = \\begin{cases} ${conditions.map(c => `${convertToLatex(c.formula || '')} & \\text{if } ${convertToLatex(c.condition || '')}`).join(' \\\\ ')} ${formula ? `\\\\ ${convertToLatex(formula)} & \\text{otherwise}` : ''} \\end{cases}`
+                                        : `${outputVarName} = ${convertToLatex(formula)}`
+                                    }
                                 </div>
                             </div>
                         </div>
@@ -497,6 +607,229 @@ export default function FormulaEditor({ parameters, onResultChange }) {
                     <strong>Tip:</strong> 사칙연산과 괄호, 변수명을 자유롭게 조합하세요. 계산 결과를 <strong>[등록]</strong> 버튼으로 상단 UI에 반영할 수 있습니다.
                 </div>
             </div>
+        </div>
+    );
+}
+
+// ConditionCase 컴포넌트 - 각 조건부 케이스를 렌더링
+function ConditionCase({
+    cond,
+    index,
+    outputVarName,
+    onRemove,
+    onUpdate,
+    parameters,
+    availableVariables,
+    activeInputId,
+    setActiveInputId,
+    showSuggestions,
+    suggestions,
+    selectedSuggestionIndex,
+    setSelectedSuggestionIndex,
+    handleFormulaChange,
+    handleKeyDown,
+    selectSuggestion,
+    suggestionsRef,
+    convertToLatex
+}) {
+    return (
+        <div style={{ marginBottom: '1rem', padding: '1rem', background: '#f8f9fa', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-primary)', minWidth: '80px' }}>
+                    Case {index + 1}:
+                </label>
+                <button
+                    onClick={onRemove}
+                    style={{
+                        marginLeft: 'auto',
+                        padding: '0.25rem 0.5rem',
+                        background: 'var(--accent-danger)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '0.75rem',
+                        fontWeight: '600'
+                    }}
+                >
+                    삭제
+                </button>
+            </div>
+
+            {/* 조건 입력 */}
+            <div style={{ marginBottom: '0.75rem' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: '600', color: '#666', display: 'block', marginBottom: '0.25rem' }}>
+                    조건 (Condition):
+                </label>
+                <div style={{ position: 'relative' }}>
+                    <input
+                        type="text"
+                        value={cond.condition}
+                        onChange={(e) => {
+                            onUpdate('condition', e.target.value);
+                            handleFormulaChange(e);
+                        }}
+                        onKeyDown={handleKeyDown}
+                        onFocus={() => setActiveInputId(`condition-${cond.id}`)}
+                        placeholder="예: A_Volt > 5"
+                        style={{
+                            width: '100%',
+                            padding: '0.75rem 1rem',
+                            fontSize: '0.9rem',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: '6px',
+                            fontFamily: 'Monaco, Menlo, "Courier New", monospace',
+                            textAlign: 'left',
+                            outline: 'none',
+                            transition: 'all 0.3s',
+                            background: 'white'
+                        }}
+                    />
+
+                    {/* 자동완성 드롭다운 */}
+                    {showSuggestions && activeInputId === `condition-${cond.id}` && suggestions.length > 0 && (
+                        <AutocompleteDropdown
+                            suggestions={suggestions}
+                            selectedIndex={selectedSuggestionIndex}
+                            onSelect={selectSuggestion}
+                            onHover={setSelectedSuggestionIndex}
+                            parameters={parameters}
+                            suggestionsRef={suggestionsRef}
+                        />
+                    )}
+                </div>
+            </div>
+
+            {/* 수식 입력 */}
+            <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: '600', color: '#666', display: 'block', marginBottom: '0.25rem' }}>
+                    수식 (Formula):
+                </label>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                    <input
+                        type="text"
+                        value={outputVarName}
+                        readOnly
+                        style={{
+                            width: '110px',
+                            padding: '0.75rem 0.5rem',
+                            fontSize: '0.9rem',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: '6px',
+                            fontFamily: 'monospace',
+                            background: '#e9ecef',
+                            color: '#666',
+                            textAlign: 'center',
+                            fontWeight: '700'
+                        }}
+                    />
+                    <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--text-secondary)', paddingTop: '0.6rem' }}>=</span>
+                    <div style={{ position: 'relative', flex: 1 }}>
+                        <input
+                            type="text"
+                            value={cond.formula}
+                            onChange={(e) => {
+                                onUpdate('formula', e.target.value);
+                                handleFormulaChange(e);
+                            }}
+                            onKeyDown={handleKeyDown}
+                            onFocus={() => setActiveInputId(`formula-${cond.id}`)}
+                            placeholder="수식을 입력하세요"
+                            style={{
+                                width: '100%',
+                                padding: '0.75rem 1rem',
+                                fontSize: '0.9rem',
+                                border: '1px solid var(--border-color)',
+                                borderRadius: '6px',
+                                fontFamily: 'Monaco, Menlo, "Courier New", monospace',
+                                textAlign: 'left',
+                                outline: 'none',
+                                transition: 'all 0.3s',
+                                background: 'white'
+                            }}
+                        />
+
+                        {/* 자동완성 드롭다운 */}
+                        {showSuggestions && activeInputId === `formula-${cond.id}` && suggestions.length > 0 && (
+                            <AutocompleteDropdown
+                                suggestions={suggestions}
+                                selectedIndex={selectedSuggestionIndex}
+                                onSelect={selectSuggestion}
+                                onHover={setSelectedSuggestionIndex}
+                                parameters={parameters}
+                                suggestionsRef={suggestionsRef}
+                            />
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// AutocompleteDropdown 컴포넌트 - 자동완성 드롭다운 UI
+function AutocompleteDropdown({ suggestions, selectedIndex, onSelect, onHover, parameters, suggestionsRef }) {
+    const typeMap = {
+        'Double': { icon: '🔢', color: '#4EC9B0', label: 'number' },
+        'Integer': { icon: '🔢', color: '#4EC9B0', label: 'int' },
+        'String': { icon: '📝', color: '#CE9178', label: 'string' },
+        'Boolean': { icon: '✓', color: '#569CD6', label: 'bool' },
+        'Group': { icon: '📁', color: '#DCDCAA', label: 'group' }
+    };
+
+    return (
+        <div
+            ref={suggestionsRef}
+            style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                right: 0,
+                marginTop: '4px',
+                background: '#1e1e1e',
+                border: '1px solid #454545',
+                borderRadius: '4px',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                zIndex: 1000,
+                maxHeight: '200px',
+                overflowY: 'auto',
+                fontFamily: '"Segoe UI", Tahoma, Geneva, Verdana, sans-serif'
+            }}
+        >
+            {suggestions.map((suggestion, idx) => {
+                const param = parameters[suggestion];
+                const typeInfo = typeMap[param?.Type] || { icon: '📌', color: '#9CDCFE', label: 'var' };
+
+                return (
+                    <div
+                        key={suggestion}
+                        onClick={() => onSelect(suggestion)}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            padding: '0.4rem 0.6rem',
+                            cursor: 'pointer',
+                            background: idx === selectedIndex ? '#094771' : 'transparent',
+                            borderLeft: idx === selectedIndex ? '3px solid #007ACC' : '3px solid transparent',
+                            transition: 'all 0.1s'
+                        }}
+                        onMouseEnter={() => onHover(idx)}
+                    >
+                        <span style={{ fontSize: '0.9rem', marginRight: '0.4rem', width: '18px', textAlign: 'center' }}>
+                            {typeInfo.icon}
+                        </span>
+                        <span style={{ flex: 1, color: '#9CDCFE', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                            {suggestion}
+                        </span>
+                        <span style={{ padding: '0.1rem 0.3rem', background: 'rgba(255,255,255,0.1)', color: typeInfo.color, fontSize: '0.65rem', borderRadius: '3px', marginRight: '0.4rem' }}>
+                            {typeInfo.label}
+                        </span>
+                        <span style={{ color: '#858585', fontSize: '0.8rem', fontFamily: 'monospace', minWidth: '50px', textAlign: 'right' }}>
+                            {param?.Default ?? 'N/A'}
+                        </span>
+                    </div>
+                );
+            })}
         </div>
     );
 }
