@@ -432,7 +432,11 @@ export default function FormulaEditor({ parameters, onResultChange }) {
 
     // 수식 상태에 따른 스타일
     const getInputStyle = () => {
-        if (error) return { borderColor: 'var(--accent-danger)', background: 'rgba(239, 68, 68, 0.05)' };
+        if (error) return {
+            borderColor: '#e03131',
+            background: '#fff5f5',
+            boxShadow: '0 0 0 3px rgba(224, 49, 49, 0.1)'
+        };
         if (evaluationResult) return { borderColor: '#10b981', background: 'rgba(16, 185, 129, 0.05)' };
         return {};
     };
@@ -820,13 +824,14 @@ function ConditionCase({
                             width: '100%',
                             padding: '0.75rem 1rem',
                             fontSize: '0.9rem',
-                            border: '1px solid var(--border-color)',
+                            border: validationErrors && validationErrors[`condition-${cond.id}`] ? '1.5px solid #e03131' : '1px solid var(--border-color)',
                             borderRadius: '6px',
                             fontFamily: 'Monaco, Menlo, "Courier New", monospace',
                             textAlign: 'left',
                             outline: 'none',
                             transition: 'all 0.3s',
-                            background: 'white'
+                            background: validationErrors && validationErrors[`condition-${cond.id}`] ? '#fff5f5' : 'white',
+                            boxShadow: validationErrors && validationErrors[`condition-${cond.id}`] ? '0 0 0 3px rgba(224, 49, 49, 0.1)' : 'none'
                         }}
                     />
 
@@ -889,13 +894,14 @@ function ConditionCase({
                                 width: '100%',
                                 padding: '0.75rem 1rem',
                                 fontSize: '0.9rem',
-                                border: '1px solid var(--border-color)',
+                                border: validationErrors && validationErrors[`formula-${cond.id}`] ? '1.5px solid #e03131' : '1px solid var(--border-color)',
                                 borderRadius: '6px',
                                 fontFamily: 'Monaco, Menlo, "Courier New", monospace',
                                 textAlign: 'left',
                                 outline: 'none',
                                 transition: 'all 0.3s',
-                                background: 'white'
+                                background: validationErrors && validationErrors[`formula-${cond.id}`] ? '#fff5f5' : 'white',
+                                boxShadow: validationErrors && validationErrors[`formula-${cond.id}`] ? '0 0 0 3px rgba(224, 49, 49, 0.1)' : 'none'
                             }}
                         />
 
