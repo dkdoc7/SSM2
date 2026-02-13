@@ -147,52 +147,55 @@ export default function ResizablePanel({ leftContent, rightContent, bottomConten
                 </div>
             </div>
 
-            {/* 가로 리사이저 (상하 조절) */}
-            <div
-                onMouseDown={handleMouseDownV}
-                style={{
-                    height: '4px',
-                    cursor: 'row-resize',
-                    background: isDraggingV ? 'var(--accent-primary)' : 'var(--border-color)',
-                    transition: isDraggingV ? 'none' : 'background 0.2s',
-                    position: 'relative',
-                    zIndex: 10
-                }}
-            >
-                <div
-                    style={{
-                        position: 'absolute',
-                        left: '50%',
-                        top: '50%',
-                        transform: 'translate(-50%, -50%)',
-                        width: '40px',
-                        height: '20px',
-                        background: isDraggingV ? 'var(--accent-primary)' : 'var(--border-color)',
-                        borderRadius: '4px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '10px',
-                        color: 'var(--text-secondary)',
-                        lineHeight: '1'
-                    }}
-                >
-                    ⋯
-                </div>
-            </div>
+            {/* 가로 리사이저 (상하 조절) - bottomContent가 있을 때만 표시 */}
+            {bottomContent && (
+                <>
+                    <div
+                        onMouseDown={handleMouseDownV}
+                        style={{
+                            height: '4px',
+                            cursor: 'row-resize',
+                            background: isDraggingV ? 'var(--accent-primary)' : 'var(--border-color)',
+                            transition: isDraggingV ? 'none' : 'background 0.2s',
+                            position: 'relative',
+                            zIndex: 10
+                        }}
+                    >
+                        <div
+                            style={{
+                                position: 'absolute',
+                                left: '50%',
+                                top: '50%',
+                                transform: 'translate(-50%, -50%)',
+                                width: '40px',
+                                height: '20px',
+                                background: isDraggingV ? 'var(--accent-primary)' : 'var(--border-color)',
+                                borderRadius: '4px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '10px',
+                                color: 'var(--text-secondary)',
+                                lineHeight: '1'
+                            }}
+                        >
+                            ⋯
+                        </div>
+                    </div>
 
-            {/* 하단 단일 패널 */}
-            <div
-                style={{
-                    height: `${bottomHeight}px`,
-                    minHeight: `${bottomHeight}px`,
-                    background: 'var(--bg-card)',
-                    overflowY: 'auto',
-                    borderTop: 'none'
-                }}
-            >
-                {bottomContent}
-            </div>
+                    <div
+                        style={{
+                            height: `${bottomHeight}px`,
+                            minHeight: `${bottomHeight}px`,
+                            background: 'var(--bg-card)',
+                            overflowY: 'auto',
+                            borderTop: 'none'
+                        }}
+                    >
+                        {bottomContent}
+                    </div>
+                </>
+            )}
         </div>
     );
 }
