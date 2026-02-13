@@ -11,6 +11,7 @@ export default function FormulaEditor({ parameters, onResultChange }) {
     const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
     const [evaluationResult, setEvaluationResult] = useState(null);
     const [error, setError] = useState(null);
+    const [validationErrors, setValidationErrors] = useState({});
     const inputRef = useRef(null);
     const suggestionsRef = useRef(null);
 
@@ -53,15 +54,12 @@ export default function FormulaEditor({ parameters, onResultChange }) {
     };
 
     // 수식 입력 처리
-    const handleFormulaChange = (e) => {
-        const newFormula = e.target.value;
-        const newCursorPosition = e.target.selectionStart;
-
-        setFormula(newFormula);
-        setCursorPosition(newCursorPosition);
+    // 자동완성 업데이트 함수 (조건/수식 입력 모두에서 사용)
+    const updateAutocomplete = (text, cursorPos) => {
+        setCursorPosition(cursorPos);
 
         // 현재 입력 중인 단어 찾기
-        const currentWord = getCurrentWord(newFormula, newCursorPosition);
+        const currentWord = getCurrentWord(text, cursorPos);
 
         if (currentWord.length > 0) {
             // 변수 자동완성 제안
@@ -79,6 +77,14 @@ export default function FormulaEditor({ parameters, onResultChange }) {
         } else {
             setShowSuggestions(false);
         }
+    };
+
+    const handleFormulaChange = (e) => {
+        const newFormula = e.target.value;
+        const newCursorPosition = e.target.selectionStart;
+
+        setFormula(newFormula);
+        updateAutocomplete(newFormula, newCursorPosition);
 
         // 수식 평가
         evaluateFormula(newFormula);
@@ -86,25 +92,56 @@ export default function FormulaEditor({ parameters, onResultChange }) {
 
     // 자동완성 선택
     const selectSuggestion = (suggestion) => {
-        const currentWord = getCurrentWord(formula, cursorPosition);
-        const beforeWord = formula.substring(0, cursorPosition - currentWord.length);
-        const afterCursor = formula.substring(cursorPosition);
+        // activeInputId에 따라 적절한 필드 업데이트
+        if (activeInputId === 'main') {
+            // 메인 수식 업데이트
+            const currentWord = getCurrentWord(formula, cursorPosition);
+            const beforeWord = formula.substring(0, cursorPosition - currentWord.length);
+            const afterCursor = formula.substring(cursorPosition);
 
-        const newFormula = beforeWord + suggestion + afterCursor;
-        const newCursorPosition = beforeWord.length + suggestion.length;
+            const newFormula = beforeWord + suggestion + afterCursor;
+            const newCursorPosition = beforeWord.length + suggestion.length;
 
-        setFormula(newFormula);
-        setShowSuggestions(false);
+            setFormula(newFormula);
+            setShowSuggestions(false);
 
-        // 포커스 복원 및 커서 위치 설정
-        setTimeout(() => {
-            if (inputRef.current) {
-                inputRef.current.focus();
-                inputRef.current.setSelectionRange(newCursorPosition, newCursorPosition);
+            // 포커스 복원 및 커서 위치 설정
+            setTimeout(() => {
+                if (inputRef.current) {
+                    inputRef.current.focus();
+                    inputRef.current.setSelectionRange(newCursorPosition, newCursorPosition);
+                }
+            }, 0);
+
+            evaluateFormula(newFormula);
+        } else if (activeInputId.startsWith('condition-') || activeInputId.startsWith('formula-')) {
+            // 조건 케이스의 필드 업데이트
+            const [fieldType, condId] = activeInputId.split('-');
+            const cond = conditions.find(c => c.id === parseInt(condId));
+
+            if (cond) {
+                const currentText = fieldType === 'condition' ? cond.condition : cond.formula;
+                const currentWord = getCurrentWord(currentText, cursorPosition);
+                const beforeWord = currentText.substring(0, cursorPosition - currentWord.length);
+                const afterCursor = currentText.substring(cursorPosition);
+
+                const newText = beforeWord + suggestion + afterCursor;
+
+                // 해당 조건의 필드 업데이트
+                updateCondition(parseInt(condId), fieldType, newText);
+                setShowSuggestions(false);
+
+                // 포커스는 유지되므로 커서 위치만 설정 필요
+                const newCursorPosition = beforeWord.length + suggestion.length;
+                setTimeout(() => {
+                    const input = document.querySelector(`input[placeholder*="${fieldType === 'condition' ? 'A_Volt' : '수식'}"]`);
+                    if (input && input.value === newText) {
+                        input.focus();
+                        input.setSelectionRange(newCursorPosition, newCursorPosition);
+                    }
+                }, 0);
             }
-        }, 0);
-
-        evaluateFormula(newFormula);
+        }
     };
 
     // 키보드 이벤트 처리
@@ -127,13 +164,64 @@ export default function FormulaEditor({ parameters, onResultChange }) {
         }
     };
 
+    // 변수 유효성 검사 함수 (조건/수식 모두에서 사용)
+    const validateVariables = (text) => {
+        if (!text || !text.trim()) {
+            return null;
+        }
+
+        if (!parameters) {
+            return '파라미터가 정의되지 않았습니다.';
+        }
+
+        // 변수 유효성 검사
+        const variablesInFormula = text.match(/[a-zA-Z_][a-zA-Z0-9_]*/g) || [];
+        // LaTeX 명령어 및 논리 연산자 제외
+        const realVariables = variablesInFormula.filter(v =>
+            !['land', 'lor', 'neg', 'neq', 'leq', 'geq', 'times', 'div', 'frac', 'text', 'if', 'otherwise',
+                'and', 'or', 'not', 'true', 'false'].includes(v)
+        );
+
+        const invalidVars = realVariables.filter(v => !availableVariables.includes(v));
+
+        if (invalidVars.length > 0) {
+            return `미등록 변수: ${invalidVars.join(', ')}`;
+        }
+
+        return null;
+    };
+
+    // 구문 오류 검사 함수
+    const validateSyntax = (text) => {
+        if (!text || !text.trim()) return null;
+
+        try {
+            // 더미 컨텍스트 생성 (모든 변수를 0으로 정의)
+            const dummyContext = {};
+            if (availableVariables) {
+                availableVariables.forEach(v => dummyContext[v] = 0);
+            }
+
+            // JS 문법으로 변환 (and -> &&, or -> ||, not -> !)
+            let jsText = text
+                .replace(/\band\b/gi, '&&')
+                .replace(/\bor\b/gi, '||')
+                .replace(/\bnot\b/gi, '!');
+
+            const keys = Object.keys(dummyContext);
+            const values = Object.values(dummyContext);
+            new Function(...keys, `return ${jsText}`)(...values);
+
+            return null;
+        } catch (e) {
+            return '올바르지 않은 수식입니다.';
+        }
+    };
+
     // 수식 평가 함수
     const evaluateFormula = (formulaText) => {
-        if (!formulaText.trim()) {
-            setError(null);
-            setEvaluationResult(null);
-            return;
-        }
+        const currentErrors = {};
+        let hasError = false;
 
         if (!parameters) {
             setError('파라미터가 정의되지 않았습니다.');
@@ -141,17 +229,54 @@ export default function FormulaEditor({ parameters, onResultChange }) {
             return;
         }
 
-        try {
-            // 변수 유효성 검사
-            const variablesInFormula = formulaText.match(/[a-zA-Z_][a-zA-Z0-9_]*/g) || [];
-            const invalidVars = variablesInFormula.filter(v => !availableVariables.includes(v));
+        // 변수 유효성 검사 (메인 수식)
+        let mainError = validateVariables(formulaText);
+        if (!mainError) {
+            mainError = validateSyntax(formulaText);
+        }
 
-            if (invalidVars.length > 0) {
-                setError(`미등록 변수: ${invalidVars.join(', ')}`);
-                setEvaluationResult(null);
-                return;
+        if (mainError) {
+            currentErrors['main'] = mainError;
+            hasError = true;
+        }
+
+        // 조건부 케이스 유효성 검사
+        conditions.forEach(cond => {
+            let condError = validateVariables(cond.condition);
+            if (!condError) {
+                condError = validateSyntax(cond.condition);
+            }
+            if (condError) {
+                currentErrors[`condition-${cond.id}`] = condError;
+                hasError = true;
             }
 
+            let formError = validateVariables(cond.formula);
+            if (!formError) {
+                formError = validateSyntax(cond.formula);
+            }
+            if (formError) {
+                currentErrors[`formula-${cond.id}`] = formError;
+                hasError = true;
+            }
+        });
+
+        setValidationErrors(currentErrors);
+
+        if (hasError) {
+            setEvaluationResult(null);
+            // 메인 수식 오류만 전역 에러로 표시 (나머지는 각 필드에 표시)
+            if (currentErrors['main']) {
+                setError(currentErrors['main']);
+            } else {
+                setError(null);
+            }
+            return;
+        } else {
+            setError(null);
+        }
+
+        try {
             // --- 향상된 컨텍스트 생성 (수식 계층 처리) ---
             const context = {};
 
@@ -167,8 +292,6 @@ export default function FormulaEditor({ parameters, onResultChange }) {
             });
 
             // 2단계: 수식으로 정의된 변수들 평가 (간단한 2패스 전략)
-            // 실제 상용 앱에서는 순환 참조를 감지하는 유향 그래프(DAG) 처리가 필요하지만 
-            // 여기서는 단순 수식 변수를 위해 evaluateExpression 로직을 활용합니다.
             Object.entries(parameters).forEach(([key, param]) => {
                 const val = param.Default;
                 if (typeof val === 'string' && val.trim().startsWith('(')) {
@@ -187,11 +310,24 @@ export default function FormulaEditor({ parameters, onResultChange }) {
             });
 
             // --- 최종 수식 평가 ---
+            // 조건부 로직 평가가 필요할 수 있으나, 현재는 메인 수식의 유효성만 체크하고 값은 0으로 처리하거나
+            // 실제 조건에 따른 분기 처리를 구현해야 함. 
+            // 하지만 요구사항은 '유효성 검증'이 반영되는 것이므로, 일단 메인 수식 평가를 시도.
+            // 조건이 있을 때는 결과값보다는 에러 여부가 중요함.
+
+            let result;
             const keys = Object.keys(context);
             const values = Object.values(context);
-            const result = new Function(...keys, `return ${formulaText}`)(...values);
+
+            // 임시 결과 계산 (문법 체크용)
+            // 메인 수식이 비어있으면 0으로 간주
+            const targetFormula = formulaText || '0';
+            result = new Function(...keys, `return ${targetFormula}`)(...values);
 
             if (typeof result === 'number' && !isNaN(result)) {
+                // 사용된 변수 추출 (메인 수식 기준)
+                const variablesInFormula = (formulaText || '').match(/[a-zA-Z_][a-zA-Z0-9_]*/g) || [];
+
                 setEvaluationResult({
                     value: result,
                     usedVariables: variablesInFormula.filter((v, i, arr) => arr.indexOf(v) === i),
@@ -207,6 +343,13 @@ export default function FormulaEditor({ parameters, onResultChange }) {
             setEvaluationResult(null);
         }
     };
+
+    // 조건이나 수식이 변경될 때마다 평가 수행
+    useEffect(() => {
+        if (parameters) {
+            evaluateFormula(formula);
+        }
+    }, [formula, conditions, parameters]);
 
     // 수식을 LaTeX 형식으로 변환
     const convertToLatex = (formulaText) => {
@@ -368,11 +511,12 @@ export default function FormulaEditor({ parameters, onResultChange }) {
                         suggestions={suggestions}
                         selectedSuggestionIndex={selectedSuggestionIndex}
                         setSelectedSuggestionIndex={setSelectedSuggestionIndex}
-                        handleFormulaChange={handleFormulaChange}
+                        updateAutocomplete={updateAutocomplete}
                         handleKeyDown={handleKeyDown}
                         selectSuggestion={selectSuggestion}
                         suggestionsRef={suggestionsRef}
                         convertToLatex={convertToLatex}
+                        validationErrors={validationErrors}
                     />
                 ))}
             </div>
@@ -392,7 +536,6 @@ export default function FormulaEditor({ parameters, onResultChange }) {
                         type="text"
                         value={outputVarName}
                         onChange={(e) => setOutputVarName(e.target.value)}
-                        readOnly={conditions.length > 0}
                         placeholder="출력 변수명"
                         style={{
                             width: '140px',
@@ -405,8 +548,8 @@ export default function FormulaEditor({ parameters, onResultChange }) {
                             textAlign: 'center',
                             fontWeight: '700',
                             color: 'var(--accent-primary)',
-                            background: conditions.length > 0 ? '#e9ecef' : 'rgba(52, 152, 219, 0.05)',
-                            cursor: conditions.length > 0 ? 'not-allowed' : 'text'
+                            background: 'rgba(52, 152, 219, 0.05)',
+                            cursor: 'text'
                         }}
                     />
                     <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--text-secondary)' }}>=</span>
@@ -626,11 +769,12 @@ function ConditionCase({
     suggestions,
     selectedSuggestionIndex,
     setSelectedSuggestionIndex,
-    handleFormulaChange,
+    updateAutocomplete,
     handleKeyDown,
     selectSuggestion,
     suggestionsRef,
-    convertToLatex
+    convertToLatex,
+    validationErrors
 }) {
     return (
         <div style={{ marginBottom: '1rem', padding: '1rem', background: '#f8f9fa', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
@@ -667,7 +811,7 @@ function ConditionCase({
                         value={cond.condition}
                         onChange={(e) => {
                             onUpdate('condition', e.target.value);
-                            handleFormulaChange(e);
+                            updateAutocomplete(e.target.value, e.target.selectionStart);
                         }}
                         onKeyDown={handleKeyDown}
                         onFocus={() => setActiveInputId(`condition-${cond.id}`)}
@@ -696,6 +840,12 @@ function ConditionCase({
                             parameters={parameters}
                             suggestionsRef={suggestionsRef}
                         />
+                    )}
+                    {/* 에러 메시지 */}
+                    {validationErrors && validationErrors[`condition-${cond.id}`] && (
+                        <div style={{ color: '#e03131', fontSize: '0.8rem', marginTop: '0.25rem', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                            <span>⚠️</span> {validationErrors[`condition-${cond.id}`]}
+                        </div>
                     )}
                 </div>
             </div>
@@ -730,7 +880,7 @@ function ConditionCase({
                             value={cond.formula}
                             onChange={(e) => {
                                 onUpdate('formula', e.target.value);
-                                handleFormulaChange(e);
+                                updateAutocomplete(e.target.value, e.target.selectionStart);
                             }}
                             onKeyDown={handleKeyDown}
                             onFocus={() => setActiveInputId(`formula-${cond.id}`)}
@@ -759,6 +909,12 @@ function ConditionCase({
                                 parameters={parameters}
                                 suggestionsRef={suggestionsRef}
                             />
+                        )}
+                        {/* 에러 메시지 */}
+                        {validationErrors && validationErrors[`formula-${cond.id}`] && (
+                            <div style={{ color: '#e03131', fontSize: '0.8rem', marginTop: '0.25rem', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                <span>⚠️</span> {validationErrors[`formula-${cond.id}`]}
+                            </div>
                         )}
                     </div>
                 </div>
