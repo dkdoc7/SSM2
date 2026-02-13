@@ -204,11 +204,12 @@ export default function FormulaEditor({ parameters }) {
                         outline: 'none',
                         fontFamily: 'Monaco, Menlo, "Courier New", monospace',
                         transition: 'all 0.3s',
+                        textAlign: 'left',
                         ...getInputStyle()
                     }}
                 />
 
-                {/* 자동완성 드롭다운 */}
+                {/* VS Code 스타일 자동완성 드롭다운 */}
                 {showSuggestions && suggestions.length > 0 && (
                     <div
                         ref={suggestionsRef}
@@ -218,40 +219,105 @@ export default function FormulaEditor({ parameters }) {
                             left: 0,
                             right: 0,
                             marginTop: '4px',
-                            background: 'white',
-                            border: '1px solid var(--border-color)',
-                            borderRadius: '6px',
-                            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                            background: '#1e1e1e',
+                            border: '1px solid #454545',
+                            borderRadius: '4px',
+                            boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
                             zIndex: 1000,
-                            maxHeight: '200px',
-                            overflowY: 'auto'
+                            maxHeight: '300px',
+                            overflowY: 'auto',
+                            fontFamily: '"Segoe UI", Tahoma, Geneva, Verdana, sans-serif'
                         }}
                     >
-                        {suggestions.map((suggestion, index) => (
-                            <div
-                                key={suggestion}
-                                onClick={() => selectSuggestion(suggestion)}
-                                style={{
-                                    padding: '0.5rem 1rem',
-                                    cursor: 'pointer',
-                                    background: index === selectedSuggestionIndex ? 'var(--accent-primary)' : 'transparent',
-                                    color: index === selectedSuggestionIndex ? 'white' : 'var(--text-primary)',
-                                    fontSize: '0.9rem',
-                                    fontFamily: 'Monaco, Menlo, "Courier New", monospace',
-                                    transition: 'all 0.2s'
-                                }}
-                                onMouseEnter={() => setSelectedSuggestionIndex(index)}
-                            >
-                                <span style={{ fontWeight: '600' }}>{suggestion}</span>
-                                <span style={{
-                                    marginLeft: '0.5rem',
-                                    opacity: 0.7,
-                                    fontSize: '0.85rem'
-                                }}>
-                                    = {parameters[suggestion]?.Default ?? 'N/A'}
-                                </span>
-                            </div>
-                        ))}
+                        {suggestions.map((suggestion, index) => {
+                            const param = parameters[suggestion];
+                            const typeMap = {
+                                'Double': { icon: '🔢', color: '#4EC9B0', label: 'number' },
+                                'Integer': { icon: '🔢', color: '#4EC9B0', label: 'int' },
+                                'String': { icon: '📝', color: '#CE9178', label: 'string' },
+                                'Boolean': { icon: '✓', color: '#569CD6', label: 'bool' },
+                                'Group': { icon: '📁', color: '#DCDCAA', label: 'group' }
+                            };
+                            const typeInfo = typeMap[param?.Type] || { icon: '📌', color: '#9CDCFE', label: 'var' };
+
+                            return (
+                                <div
+                                    key={suggestion}
+                                    onClick={() => selectSuggestion(suggestion)}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        padding: '0.5rem 0.75rem',
+                                        cursor: 'pointer',
+                                        background: index === selectedSuggestionIndex ? '#094771' : 'transparent',
+                                        borderLeft: index === selectedSuggestionIndex ? '3px solid #007ACC' : '3px solid transparent',
+                                        transition: 'all 0.1s'
+                                    }}
+                                    onMouseEnter={() => setSelectedSuggestionIndex(index)}
+                                >
+                                    {/* 아이콘 */}
+                                    <span style={{
+                                        fontSize: '1rem',
+                                        marginRight: '0.5rem',
+                                        width: '20px',
+                                        textAlign: 'center'
+                                    }}>
+                                        {typeInfo.icon}
+                                    </span>
+
+                                    {/* 변수명 */}
+                                    <span style={{
+                                        flex: 1,
+                                        color: '#9CDCFE',
+                                        fontFamily: 'Monaco, Menlo, "Courier New", monospace',
+                                        fontSize: '0.9rem',
+                                        fontWeight: '500'
+                                    }}>
+                                        {suggestion}
+                                    </span>
+
+                                    {/* 타입 배지 */}
+                                    <span style={{
+                                        padding: '0.15rem 0.4rem',
+                                        background: 'rgba(255,255,255,0.1)',
+                                        color: typeInfo.color,
+                                        fontSize: '0.7rem',
+                                        borderRadius: '3px',
+                                        marginRight: '0.5rem',
+                                        fontWeight: '600',
+                                        textTransform: 'uppercase'
+                                    }}>
+                                        {typeInfo.label}
+                                    </span>
+
+                                    {/* 현재 값 */}
+                                    <span style={{
+                                        color: '#858585',
+                                        fontSize: '0.85rem',
+                                        fontFamily: 'Monaco, Menlo, monospace',
+                                        minWidth: '60px',
+                                        textAlign: 'right'
+                                    }}>
+                                        {param?.Default ?? 'N/A'}
+                                    </span>
+
+                                    {/* 키보드 힌트 (선택된 항목에만 표시) */}
+                                    {index === selectedSuggestionIndex && (
+                                        <span style={{
+                                            marginLeft: '0.75rem',
+                                            padding: '0.15rem 0.35rem',
+                                            background: 'rgba(255,255,255,0.15)',
+                                            color: '#CCCCCC',
+                                            fontSize: '0.7rem',
+                                            borderRadius: '3px',
+                                            fontWeight: '600'
+                                        }}>
+                                            ⏎
+                                        </span>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 )}
             </div>
