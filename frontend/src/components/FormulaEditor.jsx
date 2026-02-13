@@ -1,4 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
 
 export default function FormulaEditor({ parameters }) {
     const [formula, setFormula] = useState('');
@@ -148,6 +150,68 @@ export default function FormulaEditor({ parameters }) {
             setError(`구문 오류: ${err.message}`);
             setEvaluationResult(null);
         }
+    };
+
+    // 수식을 LaTeX 형식으로 변환
+    const convertToLatex = (formulaText) => {
+        if (!formulaText) return '';
+
+        // 1. 변수명을 먼저 보호 (\text{...})
+        let latex = formulaText;
+        const variables = formulaText.match(/[a-zA-Z_][a-zA-Z0-9_]*/g) || [];
+        const sortedVars = [...new Set(variables)].sort((a, b) => b.length - a.length);
+
+        sortedVars.forEach(variable => {
+            const escapedVar = variable.replace(/_/g, '\\_');
+            latex = latex.replace(new RegExp(`\\b${variable}\\b`, 'g'), `\\text{${escapedVar}}`);
+        });
+
+        // 2. 분수 처리 (a / b -> \frac{a}{b})
+        // 중첩 괄호를 지원하기 위한 정규식 (최대 3단계 중첩 지원)
+        // term1: 괄호로 묶인 식
+        const nestedParen = '\\((?:[^()]|\\((?:[^()]|\\([^()]*\\))*\\))*\\)';
+        // term2: \text{...}로 보호된 변수, 숫자, 소수점
+        const simpleTerm = '\\\\text\\{[^{}]+\\}|[a-zA-Z0-9.\\_]+';
+        // 전체 항: (항) 또는 (괄호식) 들이 곱셈(*)으로 연결된 것까지 포함
+        const baseTerm = `(?:${nestedParen}|${simpleTerm})`;
+        const fullTerm = `${baseTerm}(?:\\s*\\*\\s*${baseTerm})*`;
+
+        let prevLatex;
+        let iteration = 0;
+        // 최대 10번 반복하여 중첩 분수 처리
+        do {
+            prevLatex = latex;
+            const fractionRegex = new RegExp(`(${fullTerm})\\s*\\/\\s*(${fullTerm})`, 'g');
+
+            latex = latex.replace(fractionRegex, (match, p1, p2) => {
+                // 양 끝의 불필요한 괄호 제거 로직
+                let num = p1.trim();
+                let den = p2.trim();
+
+                // 분자/분모 전체가 괄호로 감싸져 있다면 제거
+                if (num.startsWith('(') && num.endsWith(')')) {
+                    // 내부 괄호가 짝이 맞는지 확인 후 제거
+                    num = num.slice(1, -1);
+                }
+                if (den.startsWith('(') && den.endsWith(')')) {
+                    den = den.slice(1, -1);
+                }
+
+                return `\\frac{${num}}{${den}}`;
+            });
+            iteration++;
+        } while (latex !== prevLatex && iteration < 10);
+
+        // 3. 나머지 연산자 처리
+        latex = latex
+            .replace(/\*/g, ' \\times ')
+            .replace(/\+/g, ' + ')
+            .replace(/-/g, ' - ');
+
+        // 남은 / 가 있다면 (정규식에 안 걸린 경우) \div로 변경
+        latex = latex.replace(/\//g, ' \\div ');
+
+        return latex;
     };
 
     // 수식 상태에 따른 스타일
@@ -365,52 +429,118 @@ export default function FormulaEditor({ parameters }) {
                             ✓ 평가 결과
                         </div>
 
+                        {/* 2컬럼 레이아웃 */}
                         <div style={{
-                            fontSize: '1.5rem',
-                            fontWeight: '700',
-                            color: 'var(--text-primary)',
-                            marginBottom: '1rem',
-                            fontFamily: 'monospace'
+                            display: 'grid',
+                            gridTemplateColumns: '1fr 1fr',
+                            gap: '1.5rem'
                         }}>
-                            = {evaluationResult.value.toFixed(4)}
-                        </div>
-
-                        <div style={{
-                            fontSize: '0.85rem',
-                            color: 'var(--text-secondary)',
-                            marginBottom: '0.5rem',
-                            fontWeight: '600'
-                        }}>
-                            사용된 변수:
-                        </div>
-                        <div style={{
-                            display: 'flex',
-                            flexWrap: 'wrap',
-                            gap: '0.5rem'
-                        }}>
-                            {evaluationResult.usedVariables.map(variable => (
-                                <div
-                                    key={variable}
-                                    style={{
-                                        padding: '0.25rem 0.75rem',
-                                        background: 'white',
-                                        border: '1px solid var(--border-color)',
-                                        borderRadius: '4px',
-                                        fontSize: '0.85rem',
-                                        fontFamily: 'monospace'
-                                    }}
-                                >
-                                    <span style={{
-                                        color: 'var(--accent-primary)',
-                                        fontWeight: '600'
-                                    }}>
-                                        {variable}
-                                    </span>
-                                    <span style={{ color: 'var(--text-secondary)' }}>
-                                        {' '}= {evaluationResult.context[variable]}
-                                    </span>
+                            {/* 왼쪽 컬럼: 계산 결과 및 변수 */}
+                            <div>
+                                <div style={{
+                                    fontSize: '1.5rem',
+                                    fontWeight: '700',
+                                    color: 'var(--text-primary)',
+                                    marginBottom: '1rem',
+                                    fontFamily: 'monospace'
+                                }}>
+                                    = {evaluationResult.value.toFixed(4)}
                                 </div>
-                            ))}
+
+                                <div style={{
+                                    fontSize: '0.85rem',
+                                    color: 'var(--text-secondary)',
+                                    marginBottom: '0.5rem',
+                                    fontWeight: '600'
+                                }}>
+                                    사용된 변수:
+                                </div>
+                                <div style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '0.5rem'
+                                }}>
+                                    {evaluationResult.usedVariables.map(variable => (
+                                        <div
+                                            key={variable}
+                                            style={{
+                                                padding: '0.5rem 0.75rem',
+                                                background: 'white',
+                                                border: '1px solid var(--border-color)',
+                                                borderRadius: '4px',
+                                                fontSize: '0.85rem',
+                                                fontFamily: 'monospace',
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                alignItems: 'center'
+                                            }}
+                                        >
+                                            <span style={{
+                                                color: 'var(--accent-primary)',
+                                                fontWeight: '600'
+                                            }}>
+                                                {variable}
+                                            </span>
+                                            <span style={{ color: 'var(--text-secondary)' }}>
+                                                = {evaluationResult.context[variable]}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* 우측 컬럼: LaTeX 수식 */}
+                            <div style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                                background: 'white',
+                                padding: '1.5rem',
+                                borderRadius: '6px',
+                                border: '1px solid var(--border-color)'
+                            }}>
+                                <div style={{
+                                    fontSize: '0.75rem',
+                                    color: 'var(--text-secondary)',
+                                    marginBottom: '1rem',
+                                    fontWeight: '600',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.05em'
+                                }}>
+                                    LaTeX 수식
+                                </div>
+                                <div
+                                    style={{
+                                        fontSize: '1.2rem',
+                                        textAlign: 'center',
+                                        padding: '1rem',
+                                        minHeight: '60px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                    }}
+                                    dangerouslySetInnerHTML={{
+                                        __html: katex.renderToString(convertToLatex(formula), {
+                                            throwOnError: false,
+                                            displayMode: true
+                                        })
+                                    }}
+                                />
+                                <div style={{
+                                    marginTop: '1rem',
+                                    fontSize: '0.75rem',
+                                    color: 'var(--text-secondary)',
+                                    fontFamily: 'monospace',
+                                    background: '#f5f5f5',
+                                    padding: '0.5rem',
+                                    borderRadius: '4px',
+                                    maxWidth: '100%',
+                                    overflow: 'auto'
+                                }}>
+                                    {convertToLatex(formula)}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 )}
