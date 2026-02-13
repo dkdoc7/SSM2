@@ -3,6 +3,7 @@ import './styles/index.css';
 import ResizablePanel from './components/ResizablePanel';
 import YamlEditor from './components/YamlEditor';
 import DynamicUI from './components/DynamicUI';
+import FormulaEditor from './components/FormulaEditor';
 
 // 초기 YAML 예제
 const initialYaml = `_Frame:
@@ -84,7 +85,7 @@ function App() {
         </div>
       </div>
 
-      {/* 좌우 분할 패널 */}
+      {/* 좌우 분할 패널 + 하단 수식 편집기 */}
       <ResizablePanel
         leftContent={
           <YamlEditor
@@ -94,6 +95,9 @@ function App() {
         }
         rightContent={
           <DynamicUI parameters={parameters} />
+        }
+        bottomContent={
+          <FormulaEditor parameters={parameters} />
         }
       />
 
